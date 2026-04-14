@@ -1,24 +1,34 @@
 import axios from 'axios';
 import type { BankrWallet, TokenLaunchResult } from '@/types';
 
-const BANKR_API_URL = process.env.BANKR_API_URL || 'https://api.bankr.io';
-const API_KEY = process.env.BANKR_API_KEY || '';
+const BANKR_API_URL = process.env.BANKR_API_URL || 'https://api.bankr.bot';
+const PARTNER_KEY = process.env.BANKR_API_KEY || '';
 
+// Partner API client for token launches
+const partnerApi = axios.create({
+  baseURL: BANKR_API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Partner-Key': PARTNER_KEY,
+  },
+  timeout: 60000, // 60 second timeout for deployments
+});
+
+// Regular API client for other operations
 const api = axios.create({
   baseURL: BANKR_API_URL,
   headers: {
-    'Authorization': `Bearer ${API_KEY}`,
+    'Authorization': `Bearer ${PARTNER_KEY}`,
     'Content-Type': 'application/json',
-    'X-API-Key': API_KEY,
   },
-  timeout: 30000, // 30 second timeout
+  timeout: 30000,
 });
 
 // Add response interceptor for error handling
-api.interceptors.response.use(
+partnerApi.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.error('Bankr API Error:', {
+    console.error('Bankr Partner API Error:', {
       status: error.response?.status,
       data: error.response?.data,
       endpoint: error.config?.url,
@@ -26,6 +36,120 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// ============================================
+// TOKEN LAUNCH - PARTNER DEPLOY API
+// ============================================
+
+export interface LaunchTokenParams {
+  tokenName: string;
+  tokenSymbol?: string;
+  description?: string;
+  image?: string; // URL to image
+  tweetUrl?: string;
+  websiteUrl?: string;
+  farcasterUsername?: string;
+  farcasterFid?: number;
+  walletAddress?: string;
+  simulateOnly?: boolean;
+}
+
+export interface LaunchTokenResponse {
+  success: boolean;
+  tokenAddress?: string;
+  poolId?: string;
+  txHash?: string;
+  activityId?: string;
+  chain?: string;
+  simulated?: boolean;
+  feeDistribution?: {
+    creator: { address: string; bps: number };
+    bankr: { address: string; bps: number };
+    partner: { address: string; bps: number };
+    alt: { address: string; bps: number };
+    protocol: { address: string; bps: number };
+  };
+  error?: string;
+}
+
+// Launch token via Bankr Partner Deploy API
+export async function launchTokenViaPartner(
+  params: LaunchTokenParams
+): Promise<LaunchTokenResponse> {
+  try {
+    console.log('Launching token via Bankr Partner API:', params.tokenName);
+
+    // Determine fee recipient based on available info
+    let feeRecipient: { type: string; value: string };
+    
+    if (params.walletAddress) {
+      // Use wallet address directly
+      feeRecipient = {
+        type: 'wallet',
+        value: params.walletAddress,
+      };
+    } else if (params.farcasterUsername) {
+      // Use Farcaster username - resolves to their verified address
+      feeRecipient = {
+        type: 'farcaster',
+        value: params.farcasterUsername.replace('@', ''), // Remove @ if present
+      };
+    } else if (params.farcasterFid) {
+      // Use FID as wallet type with custody address
+      // This requires getting the custody address from Neynar first
+      throw new Error('FID-only not supported. Please provide walletAddress or farcasterUsername');
+    } else {
+      throw new Error('feeRecipient required: provide walletAddress or farcasterUsername');
+    }
+
+    const requestBody = {
+      tokenName: params.tokenName,
+      tokenSymbol: params.tokenSymbol,
+      description: params.description,
+      image: params.image,
+      tweetUrl: params.tweetUrl,
+      websiteUrl: params.websiteUrl,
+      feeRecipient,
+      simulateOnly: params.simulateOnly || false,
+    };
+
+    console.log('Partner API request:', JSON.stringify(requestBody, null, 2));
+
+    const response = await partnerApi.post('/token-launches/deploy', requestBody);
+
+    const data = response.data;
+
+    return {
+      success: true,
+      tokenAddress: data.tokenAddress,
+      poolId: data.poolId,
+      txHash: data.txHash,
+      activityId: data.activityId,
+      chain: data.chain || 'base',
+      simulated: data.simulated || false,
+      feeDistribution: data.feeDistribution,
+    };
+  } catch (error: any) {
+    console.error('Error launching token via Partner API:', error.message);
+    
+    // Return detailed error
+    return {
+      success: false,
+      error: error.response?.data?.message || error.response?.data?.error || error.message || 'Token launch failed',
+    };
+  }
+}
+
+// Simulate token launch (get predicted address without deploying)
+export async function simulateTokenLaunch(
+  params: Omit<LaunchTokenParams, 'simulateOnly'>
+): Promise<LaunchTokenResponse> {
+  return launchTokenViaPartner({ ...params, simulateOnly: true });
+}
+
+// ============================================
+// WALLET OPERATIONS
+// ============================================
 
 // Create a new wallet for an agent
 export async function createAgentWallet(agentId: string, chain: string = 'base'): Promise<BankrWallet | null> {
@@ -55,16 +179,6 @@ export async function createAgentWallet(agentId: string, chain: string = 'base')
     };
   } catch (error: any) {
     console.error('Error creating agent wallet:', error.message);
-    // Return mock data for development if API fails
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Returning mock wallet for development');
-      return {
-        address: '0x' + Array(40).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join(''),
-        chain: chain,
-        createdAt: new Date().toISOString(),
-        walletId: `mock_${agentId}`,
-      };
-    }
     return null;
   }
 }
@@ -110,7 +224,10 @@ export async function getWalletBalance(address: string, chain: string = 'base'):
   }
 }
 
-// Execute token launch via Bankr API
+// ============================================
+// TOKEN OPERATIONS (LEGACY - FOR COMPATIBILITY)
+// ============================================
+
 export async function launchToken(params: {
   name: string;
   symbol: string;
@@ -125,50 +242,22 @@ export async function launchToken(params: {
   };
   farcasterCastHash?: string;
 }): Promise<TokenLaunchResult> {
-  try {
-    console.log('Launching token via Bankr API:', params.name, params.symbol);
-    
-    const response = await api.post('/v1/tokens/launch', {
-      name: params.name,
-      symbol: params.symbol.toUpperCase(),
-      description: params.description,
-      imageUrl: params.imageUrl,
-      initialSupply: params.initialSupply,
-      deployer: params.agentWallet,
-      chain: 'base',
-      socialLinks: params.socialLinks,
-      farcasterCastHash: params.farcasterCastHash,
-      launchConfig: {
-        // 65/35 split as per Clanker standard
-        creatorRewardBps: 6500,
-        protocolRewardBps: 3500,
-      },
-    });
-    
-    if (!response.data?.contractAddress) {
-      console.error('Invalid launch response:', response.data);
-      return {
-        success: false,
-        error: response.data?.message || 'Invalid response from Bankr API',
-      };
-    }
-    
-    return {
-      success: true,
-      contractAddress: response.data.contractAddress,
-      txHash: response.data.txHash,
-      tokenId: response.data.tokenId,
-      poolAddress: response.data.poolAddress,
-    };
-  } catch (error: any) {
-    console.error('Error launching token:', error.message);
-    
-    // Return error details
-    return {
-      success: false,
-      error: error.response?.data?.message || error.message || 'Failed to launch token',
-    };
-  }
+  // Convert to Partner API format
+  const result = await launchTokenViaPartner({
+    tokenName: params.name,
+    tokenSymbol: params.symbol,
+    description: params.description,
+    image: params.imageUrl,
+    websiteUrl: params.socialLinks?.website,
+    walletAddress: params.agentWallet,
+  });
+
+  return {
+    success: result.success,
+    contractAddress: result.tokenAddress,
+    txHash: result.txHash,
+    error: result.error,
+  };
 }
 
 // Get token details from Bankr
@@ -179,64 +268,6 @@ export async function getTokenDetails(contractAddress: string): Promise<any> {
   } catch (error: any) {
     console.error('Error fetching token details:', error.message);
     return null;
-  }
-}
-
-// Execute swap
-export async function executeSwap(params: {
-  tokenIn: string;
-  tokenOut: string;
-  amount: string;
-  walletAddress: string;
-  slippage?: number;
-}): Promise<{ success: boolean; txHash?: string; error?: string }> {
-  try {
-    const response = await api.post('/v1/swap', {
-      tokenIn: params.tokenIn,
-      tokenOut: params.tokenOut,
-      amount: params.amount,
-      wallet: params.walletAddress,
-      slippage: params.slippage || 0.5,
-      chain: 'base',
-    });
-    
-    return {
-      success: true,
-      txHash: response.data.txHash,
-    };
-  } catch (error: any) {
-    console.error('Error executing swap:', error.message);
-    return {
-      success: false,
-      error: error.response?.data?.message || error.message || 'Failed to execute swap',
-    };
-  }
-}
-
-// Provide liquidity
-export async function provideLiquidity(params: {
-  token: string;
-  amount: string;
-  walletAddress: string;
-}): Promise<{ success: boolean; txHash?: string; error?: string }> {
-  try {
-    const response = await api.post('/v1/liquidity/add', {
-      token: params.token,
-      amount: params.amount,
-      wallet: params.walletAddress,
-      chain: 'base',
-    });
-    
-    return {
-      success: true,
-      txHash: response.data.txHash,
-    };
-  } catch (error: any) {
-    console.error('Error providing liquidity:', error.message);
-    return {
-      success: false,
-      error: error.response?.data?.message || error.message || 'Failed to provide liquidity',
-    };
   }
 }
 
@@ -262,7 +293,10 @@ export async function getTokenStats(contractAddress: string): Promise<any> {
   }
 }
 
-// Register agent with Bankr
+// ============================================
+// AGENT REGISTRATION
+// ============================================
+
 export async function registerAgent(params: {
   name: string;
   description: string;
@@ -326,7 +360,10 @@ export async function getAgentDetails(agentId: string): Promise<any> {
   }
 }
 
-// Get leaderboard from Bankr
+// ============================================
+// LEADERBOARD
+// ============================================
+
 export async function getLeaderboard(type: 'volume' | 'tokens' | 'reputation' = 'volume', limit = 100): Promise<any[]> {
   try {
     const response = await api.get('/v1/leaderboard', {
@@ -339,4 +376,64 @@ export async function getLeaderboard(type: 'volume' | 'tokens' | 'reputation' = 
   }
 }
 
-export { api };
+// ============================================
+// SWAP & LIQUIDITY (LEGACY)
+// ============================================
+
+export async function executeSwap(params: {
+  tokenIn: string;
+  tokenOut: string;
+  amount: string;
+  walletAddress: string;
+  slippage?: number;
+}): Promise<{ success: boolean; txHash?: string; error?: string }> {
+  try {
+    const response = await api.post('/v1/swap', {
+      tokenIn: params.tokenIn,
+      tokenOut: params.tokenOut,
+      amount: params.amount,
+      wallet: params.walletAddress,
+      slippage: params.slippage || 0.5,
+      chain: 'base',
+    });
+    
+    return {
+      success: true,
+      txHash: response.data.txHash,
+    };
+  } catch (error: any) {
+    console.error('Error executing swap:', error.message);
+    return {
+      success: false,
+      error: error.response?.data?.message || error.message || 'Failed to execute swap',
+    };
+  }
+}
+
+export async function provideLiquidity(params: {
+  token: string;
+  amount: string;
+  walletAddress: string;
+}): Promise<{ success: boolean; txHash?: string; error?: string }> {
+  try {
+    const response = await api.post('/v1/liquidity/add', {
+      token: params.token,
+      amount: params.amount,
+      wallet: params.walletAddress,
+      chain: 'base',
+    });
+    
+    return {
+      success: true,
+      txHash: response.data.txHash,
+    };
+  } catch (error: any) {
+    console.error('Error providing liquidity:', error.message);
+    return {
+      success: false,
+      error: error.response?.data?.message || error.message || 'Failed to provide liquidity',
+    };
+  }
+}
+
+export { api, partnerApi };

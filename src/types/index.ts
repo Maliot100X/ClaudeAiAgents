@@ -36,11 +36,22 @@ export interface Token {
   launchedByFid: number;
   launchedAt: string;
   totalSupply: string;
+  metadataUri?: string;
+  txHash?: string;
+  poolId?: string;
+  activityId?: string;
   marketCap?: number;
   volume24h?: number;
   price?: number;
   priceChange24h?: number;
   holders?: number;
+  feeDistribution?: {
+    creator: { address: string; bps: number };
+    bankr: { address: string; bps: number };
+    partner: { address: string; bps: number };
+    alt: { address: string; bps: number };
+    protocol: { address: string; bps: number };
+  };
 }
 
 export interface LeaderboardEntry {

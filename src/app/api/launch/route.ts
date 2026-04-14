@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { setToken, getAllTokens } from '@/lib/redis';
 import { getUserByFid } from '@/lib/neynar';
-import { launchToken, getTokenPrice, getTokenStats } from '@/lib/bankr';
+import { launchTokenViaPartner, getTokenPrice, getTokenStats } from '@/lib/bankr';
 import { uploadJSONToIPFS } from '@/lib/pinata';
 import { generateId } from '@/lib/utils';
 
-// POST /api/launch - Launch token with full metadata via Bankr API
+// POST /api/launch - Launch token via Bankr Partner Deploy API
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -14,95 +14,128 @@ export async function POST(request: NextRequest) {
       symbol, 
       description, 
       imageUrl,
-      initialSupply,
       launchedByFid,
-      agentId,
-      socialLinks,
-      metadata = {},
-      farcasterCastHash,
+      websiteUrl,
+      twitterUrl,
+      farcasterUsername,
+      walletAddress, // User's wallet for fee recipient
+      simulateOnly = false,
     } = body;
     
     // Validate required fields
-    if (!name || !symbol || !description || !launchedByFid) {
+    if (!name) {
       return NextResponse.json({
         success: false,
-        error: 'Missing required fields: name, symbol, description, launchedByFid',
+        error: 'Token name is required',
       }, { status: 400 });
     }
     
-    // Validate symbol (uppercase, no spaces, 3-10 chars)
-    const cleanSymbol = symbol.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    if (cleanSymbol.length < 3 || cleanSymbol.length > 10) {
+    // Must have either wallet address or Farcaster username for fee recipient
+    if (!walletAddress && !farcasterUsername && !launchedByFid) {
       return NextResponse.json({
         success: false,
-        error: 'Symbol must be 3-10 alphanumeric characters',
+        error: 'Fee recipient required: provide walletAddress, farcasterUsername, or connect Farcaster',
       }, { status: 400 });
     }
     
-    // Get launcher info from Neynar
-    const launcher = await getUserByFid(launchedByFid);
-    if (!launcher) {
-      return NextResponse.json({
-        success: false,
-        error: 'Launcher not found on Farcaster',
-      }, { status: 404 });
+    // Validate symbol (uppercase, no spaces, 1-10 chars)
+    let cleanSymbol = symbol;
+    if (cleanSymbol) {
+      cleanSymbol = cleanSymbol.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (cleanSymbol.length > 10) {
+        cleanSymbol = cleanSymbol.substring(0, 10);
+      }
     }
     
-    // Create full metadata for IPFS
-    const fullMetadata = {
+    // Get launcher info from Neynar if FID provided
+    let launcher = null;
+    if (launchedByFid) {
+      launcher = await getUserByFid(launchedByFid);
+    }
+    
+    // Determine fee recipient
+    let feeRecipientWallet = walletAddress;
+    let feeRecipientFarcaster = farcasterUsername;
+    
+    if (launcher && !feeRecipientWallet && !feeRecipientFarcaster) {
+      // Use Farcaster username from launcher
+      feeRecipientFarcaster = launcher.username;
+    }
+    
+    // Create metadata for IPFS
+    const metadata = {
       name,
       symbol: cleanSymbol,
-      description,
+      description: description || '',
       image: imageUrl,
       properties: {
-        launchedBy: launcher.username,
-        launchedByFid,
-        agentId,
+        launchedBy: launcher?.username || farcasterUsername || 'anonymous',
+        launchedByFid: launchedByFid || null,
         launchedAt: new Date().toISOString(),
         platform: 'farcaster-miniapp',
-        ...metadata
       },
-      social_links: socialLinks || {},
+      links: {
+        website: websiteUrl,
+        twitter: twitterUrl,
+      },
     };
     
-    // Upload to IPFS via Pinata
-    let metadataUri = null;
+    // Upload to IPFS (optional - Bankr handles this if not provided)
+    let ipfsUrl = null;
     try {
-      const ipfsUpload = await uploadJSONToIPFS(fullMetadata, `${cleanSymbol}_metadata`);
-      if (ipfsUpload.success) {
-        metadataUri = ipfsUpload.url;
+      if (description || imageUrl) {
+        const ipfsUpload = await uploadJSONToIPFS(metadata, `${name}_metadata`);
+        if (ipfsUpload.success) {
+          ipfsUrl = ipfsUpload.url;
+        }
       }
     } catch (ipfsError) {
-      console.error('IPFS upload failed:', ipfsError);
-      // Continue without IPFS - Bankr can handle this
+      console.log('IPFS upload optional, continuing...');
     }
     
-    // Launch token via Bankr API
-    const launchResult = await launchToken({
-      name,
-      symbol: cleanSymbol,
-      description,
-      imageUrl: imageUrl || undefined,
-      initialSupply: initialSupply || '1000000000', // 1B default
-      agentWallet: launcher.custodyAddress || '',
-      socialLinks,
-      farcasterCastHash,
+    // Launch token via Bankr Partner API
+    const launchResult = await launchTokenViaPartner({
+      tokenName: name,
+      tokenSymbol: cleanSymbol || undefined,
+      description: description || undefined,
+      image: imageUrl || undefined,
+      websiteUrl: websiteUrl || undefined,
+      tweetUrl: twitterUrl || undefined,
+      walletAddress: feeRecipientWallet || undefined,
+      farcasterUsername: feeRecipientFarcaster || undefined,
+      simulateOnly,
     });
     
     if (!launchResult.success) {
       return NextResponse.json({
         success: false,
-        error: launchResult.error || 'Token launch failed via Bankr API',
+        error: launchResult.error || 'Token launch failed via Bankr Partner API',
       }, { status: 500 });
+    }
+    
+    // If simulation mode, return predicted address
+    if (simulateOnly) {
+      return NextResponse.json({
+        success: true,
+        simulated: true,
+        data: {
+          predictedAddress: launchResult.tokenAddress,
+          poolId: launchResult.poolId,
+          feeDistribution: launchResult.feeDistribution,
+        },
+        message: 'Token deployment simulated. Predicted contract address received.',
+      }, { status: 200 });
     }
     
     // Get initial price and stats
     let price = 0;
     let stats = null;
-    if (launchResult.contractAddress) {
+    if (launchResult.tokenAddress) {
       try {
-        price = await getTokenPrice(launchResult.contractAddress);
-        stats = await getTokenStats(launchResult.contractAddress);
+        [price, stats] = await Promise.all([
+          getTokenPrice(launchResult.tokenAddress),
+          getTokenStats(launchResult.tokenAddress),
+        ]);
       } catch (e) {
         console.log('Could not fetch initial price/stats');
       }
@@ -112,24 +145,24 @@ export async function POST(request: NextRequest) {
     const token = {
       id: generateId(),
       name,
-      symbol: cleanSymbol,
-      description,
+      symbol: cleanSymbol || name.substring(0, 4).toUpperCase(),
+      description: description || '',
       imageUrl: imageUrl || null,
-      metadataUri,
-      contractAddress: launchResult.contractAddress || '',
+      metadataUri: ipfsUrl,
+      contractAddress: launchResult.tokenAddress || '',
       chain: 'base' as const,
-      launchedBy: launcher.username,
-      launchedByFid,
+      launchedBy: launcher?.username || farcasterUsername || 'unknown',
+      launchedByFid: launchedByFid || 0,
       launchedAt: new Date().toISOString(),
-      totalSupply: initialSupply || '1000000000',
       txHash: launchResult.txHash,
-      poolAddress: launchResult.poolAddress,
-      agentId,
+      poolId: launchResult.poolId,
+      activityId: launchResult.activityId,
       marketCap: stats?.marketCap || 0,
       volume24h: stats?.volume24h || 0,
       price: price,
       priceChange24h: stats?.priceChange24h || 0,
       holders: stats?.holders || 0,
+      feeDistribution: launchResult.feeDistribution,
     };
     
     // Save to Redis
@@ -138,7 +171,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: token,
-      message: 'Token launched successfully on Base via Bankr',
+      message: 'Token launched successfully on Base via Bankr Partner API',
+      bankrUrl: `https://bankr.bot/token/${launchResult.tokenAddress}`,
     }, { status: 201 });
     
   } catch (error: any) {
