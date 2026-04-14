@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+
+Sitemap: https://mini-app-three-mauve.vercel.app/sitemap.xml
