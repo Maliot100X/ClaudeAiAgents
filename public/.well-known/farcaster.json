@@ -7,12 +7,12 @@
   "frame": {
     "version": "1",
     "name": "Claude AI Agents",
-    "iconUrl": "https://mini-app-three-mauve.vercel.app/icon.png",
-    "homeUrl": "https://mini-app-three-mauve.vercel.app",
-    "imageUrl": "https://mini-app-three-mauve.vercel.app/og-image.png",
+    "iconUrl": "https://claude-mini-app.vercel.app/icon.png",
+    "homeUrl": "https://claude-mini-app.vercel.app",
+    "imageUrl": "https://claude-mini-app.vercel.app/og-image.png",
     "buttonTitle": "Launch",
-    "splashImageUrl": "https://mini-app-three-mauve.vercel.app/splash.png",
-"splashBackgroundColor": "#000000"
+    "splashImageUrl": "https://claude-mini-app.vercel.app/splash.png",
+    "splashBackgroundColor": "#000000",
     "webhookUrl": "https://api.neynar.com/f/app/2a826c98-909c-4b25-b1a4-7af1a31aeb25/event"
   }
 }

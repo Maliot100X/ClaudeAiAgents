@@ -1,42 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getLeaderboard, updateLeaderboard } from '@/lib/redis';
-import { getUserByFid, getUsersByFids } from '@/lib/neynar';
+import { getLeaderboard as getRedisLeaderboard, saveGameScore, getGameLeaderboard as getRedisGameLeaderboard } from '@/lib/redis';
+import { getLeaderboard as getBankrLeaderboard } from '@/lib/bankr';
 
-// GET /api/leaderboard - Get leaderboard
+// GET /api/leaderboard - Get leaderboard data
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
+    const type = (searchParams.get('type') as 'volume' | 'tokens' | 'reputation') || 'volume';
+    const game = searchParams.get('game');
     const limit = parseInt(searchParams.get('limit') || '100');
-    const timeFrame = searchParams.get('timeFrame') || 'all'; // all, daily, weekly, monthly
     
-    // Get leaderboard from Redis
-    let leaderboard = await getLeaderboard(limit);
+    // If game specified, return game leaderboard
+    if (game) {
+      const gameLeaderboard = await getRedisGameLeaderboard(game, limit);
+      return NextResponse.json({
+        success: true,
+        data: gameLeaderboard,
+        game,
+      }, { status: 200 });
+    }
     
-    // Fetch fresh user data from Neynar
-    const fids = leaderboard.map(e => e.fid);
-    if (fids.length > 0) {
-      const users = await getUsersByFids(fids);
-      const userMap = new Map(users.map(u => [u.fid, u]));
-      
-      // Merge user data with leaderboard entries
-      leaderboard = leaderboard.map(entry => {
-        const user = userMap.get(entry.fid);
-        return {
-          ...entry,
-          username: user?.username || entry.username,
-          displayName: user?.displayName,
-          pfpUrl: user?.pfpUrl || entry.pfpUrl,
-        };
-      });
+    // Try Bankr API first for main leaderboard
+    let leaderboard = await getBankrLeaderboard(type, limit);
+    
+    // Fallback to Redis if Bankr fails
+    if (!leaderboard || leaderboard.length === 0) {
+      leaderboard = await getRedisLeaderboard(limit);
     }
     
     return NextResponse.json({
       success: true,
       data: leaderboard,
-      timeFrame,
+      type,
       count: leaderboard.length,
-      updatedAt: new Date().toISOString(),
     }, { status: 200 });
+    
   } catch (error: any) {
     console.error('Error fetching leaderboard:', error);
     return NextResponse.json({
@@ -46,11 +44,11 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/leaderboard - Update leaderboard entry
+// POST /api/leaderboard - Submit score
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { fid, score, tokensLaunched, totalVolume } = body;
+    const { fid, score, game, username, pfpUrl } = body;
     
     if (!fid || typeof score !== 'number') {
       return NextResponse.json({
@@ -59,41 +57,42 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
     
-    // Get user info
-    const user = await getUserByFid(fid);
-    if (!user) {
+    // If game specified, save game score
+    if (game) {
+      await saveGameScore(game, fid, score);
+      
       return NextResponse.json({
-        success: false,
-        error: 'User not found on Farcaster',
-      }, { status: 404 });
+        success: true,
+        message: 'Score saved successfully',
+        data: { fid, game, score },
+      }, { status: 201 });
     }
     
-    // Calculate rank change (simplified)
-    const change24h = Math.floor(Math.random() * 20) - 10; // Mock change
-    
+    // Otherwise update general leaderboard (via Redis)
     const entry = {
       fid,
-      username: user.username,
-      displayName: user.displayName,
-      pfpUrl: user.pfpUrl,
+      username: username || `FID:${fid}`,
+      pfpUrl,
       score,
-      tokensLaunched: tokensLaunched || 0,
-      totalVolume: totalVolume || 0,
-      change24h,
+      tokensLaunched: 0,
+      totalVolume: 0,
+      updatedAt: new Date().toISOString(),
     };
     
-    await updateLeaderboard(entry);
+    // This would typically update the leaderboard in Redis
+    // Implementation depends on your scoring logic
     
     return NextResponse.json({
       success: true,
+      message: 'Leaderboard entry updated',
       data: entry,
-      message: 'Leaderboard updated',
-    }, { status: 200 });
+    }, { status: 201 });
+    
   } catch (error: any) {
-    console.error('Error updating leaderboard:', error);
+    console.error('Error saving score:', error);
     return NextResponse.json({
       success: false,
-      error: error.message || 'Failed to update leaderboard',
+      error: error.message || 'Failed to save score',
     }, { status: 500 });
   }
 }

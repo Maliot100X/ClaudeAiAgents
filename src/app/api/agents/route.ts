@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAllAgents, setAgent, getAgent } from '@/lib/redis';
 import { getUserByFid } from '@/lib/neynar';
-import { createAgentWallet } from '@/lib/bankr';
+import { createAgentWallet, registerAgent, getAgentDetails } from '@/lib/bankr';
 import { generateId } from '@/lib/utils';
 
 // GET /api/agents - List all agents
@@ -9,7 +9,35 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const ownerFid = searchParams.get('ownerFid');
+    const agentId = searchParams.get('agentId');
     
+    // If specific agent requested
+    if (agentId) {
+      // Try Redis first
+      let agent = await getAgent(agentId);
+      
+      // If not in Redis, try Bankr API
+      if (!agent) {
+        const bankrAgent = await getAgentDetails(agentId);
+        if (bankrAgent) {
+          agent = bankrAgent;
+        }
+      }
+      
+      if (!agent) {
+        return NextResponse.json({
+          success: false,
+          error: 'Agent not found',
+        }, { status: 404 });
+      }
+      
+      return NextResponse.json({
+        success: true,
+        data: agent,
+      }, { status: 200 });
+    }
+    
+    // Get all agents
     let agents = await getAllAgents();
     
     // Filter by owner if specified
@@ -17,14 +45,15 @@ export async function GET(request: NextRequest) {
       agents = agents.filter(a => a.ownerFid === parseInt(ownerFid));
     }
     
-    // Sort by reputation
-    agents.sort((a, b) => b.reputation - a.reputation);
+    // Sort by reputation (highest first)
+    agents.sort((a, b) => (b.reputation || 0) - (a.reputation || 0));
     
     return NextResponse.json({
       success: true,
       data: agents,
       count: agents.length,
     }, { status: 200 });
+    
   } catch (error: any) {
     console.error('Error fetching agents:', error);
     return NextResponse.json({
@@ -48,6 +77,13 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
     
+    if (!skills || skills.length === 0) {
+      return NextResponse.json({
+        success: false,
+        error: 'Please select at least one skill',
+      }, { status: 400 });
+    }
+    
     // Get owner info from Neynar
     const owner = await getUserByFid(ownerFid);
     if (!owner) {
@@ -57,12 +93,32 @@ export async function POST(request: NextRequest) {
       }, { status: 404 });
     }
     
-    // Create Bankr wallet for agent
-    const wallet = await createAgentWallet(generateId(), 'base');
+    // Generate agent ID
+    const agentId = generateId();
     
-    // Create agent
+    // Create Bankr wallet for agent
+    const wallet = await createAgentWallet(agentId, 'base');
+    
+    if (!wallet) {
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to create agent wallet via Bankr API',
+      }, { status: 500 });
+    }
+    
+    // Register with Bankr API
+    const bankrRegistration = await registerAgent({
+      name,
+      description,
+      ownerFid,
+      ownerUsername: owner.username,
+      skills,
+      imageUrl,
+    });
+    
+    // Create agent record
     const agent = {
-      id: generateId(),
+      id: agentId,
       name,
       description,
       imageUrl: imageUrl || null,
@@ -74,7 +130,10 @@ export async function POST(request: NextRequest) {
       totalVolume: 0,
       createdAt: new Date().toISOString(),
       isActive: true,
-      bankrWalletAddress: wallet?.address || null,
+      bankrWalletAddress: wallet.address,
+      bankrWalletId: wallet.walletId,
+      bankrAgentId: bankrRegistration.agentId || null,
+      bankrRegistered: bankrRegistration.success,
     };
     
     // Save to Redis
@@ -83,8 +142,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: agent,
-      message: 'Agent created successfully',
+      message: bankrRegistration.success 
+        ? 'Agent created and registered with Bankr successfully' 
+        : 'Agent created locally (Bankr registration pending)',
     }, { status: 201 });
+    
   } catch (error: any) {
     console.error('Error creating agent:', error);
     return NextResponse.json({

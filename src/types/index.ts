@@ -90,6 +90,16 @@ export interface BankrWallet {
   address: string;
   chain: string;
   createdAt: string;
+  walletId?: string;
+}
+
+export interface TokenLaunchResult {
+  success: boolean;
+  contractAddress?: string;
+  txHash?: string;
+  tokenId?: string;
+  poolAddress?: string;
+  error?: string;
 }
 
 export interface ApiResponse<T> {
