@@ -15,6 +15,7 @@ export async function POST(request: NextRequest) {
       description, 
       imageUrl,
       launchedByFid,
+      agentId, // Link token to agent
       websiteUrl,
       twitterUrl,
       farcasterUsername,
@@ -153,6 +154,7 @@ export async function POST(request: NextRequest) {
       chain: 'base' as const,
       launchedBy: launcher?.username || farcasterUsername || 'unknown',
       launchedByFid: launchedByFid || 0,
+      agentId: agentId || null,
       launchedAt: new Date().toISOString(),
       txHash: launchResult.txHash,
       poolId: launchResult.poolId,

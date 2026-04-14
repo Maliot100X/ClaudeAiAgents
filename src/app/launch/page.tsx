@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { 
   Rocket, 
@@ -11,7 +12,8 @@ import {
   Twitter,
   Info,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Bot
 } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
 import { useMiniApp } from '@/components/providers/miniapp-provider';
@@ -31,12 +33,16 @@ interface FormData {
   telegram: string;
 }
 
-export default function LaunchPage() {
+// Inner component with search params
+function LaunchPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const agentId = searchParams.get('agentId');
   const { user, isInFrame } = useMiniApp();
   const { isAuthenticated } = useAppStore();
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
+  const [agent, setAgent] = useState<any>(null);
   const [formData, setFormData] = useState<FormData>({
     name: '',
     symbol: '',
@@ -47,6 +53,20 @@ export default function LaunchPage() {
     twitter: '',
     telegram: '',
   });
+
+  // Fetch agent if agentId provided
+  useEffect(() => {
+    if (agentId) {
+      fetch(`/api/agents?agentId=${agentId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setAgent(data.data);
+          }
+        })
+        .catch(console.error);
+    }
+  }, [agentId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,6 +90,9 @@ export default function LaunchPage() {
           imageUrl: formData.imageUrl,
           initialSupply: formData.initialSupply,
           launchedByFid: user.fid,
+          agentId: agentId,
+          farcasterUsername: user.username,
+          walletAddress: agent?.bankrWalletAddress,
           socialLinks: {
             website: formData.website,
             twitter: formData.twitter,
@@ -100,7 +123,11 @@ export default function LaunchPage() {
 
         // Redirect after delay
         setTimeout(() => {
-          router.push('/agents');
+          if (agentId) {
+            router.push(`/agent?id=${agentId}`);
+          } else {
+            router.push('/agents');
+          }
         }, 3000);
       } else {
         setStatus({ type: 'error', message: data.error || 'Failed to launch token' });
@@ -149,6 +176,22 @@ export default function LaunchPage() {
             </div>
             <h1 className="text-3xl font-bold text-gradient mb-2">Launch Your Token</h1>
             <p className="text-white/60">Deploy an AI-powered token on Base</p>
+            
+            {/* Agent Info */}
+            {agent && (
+              <div className="mt-4 p-4 rounded-xl bg-white/5 border border-white/10">
+                <div className="flex items-center justify-center gap-3">
+                  <Bot className="w-5 h-5 text-primary" />
+                  <span className="text-sm text-white/60">Launching with agent:</span>
+                  <Link href={`/agent?id=${agent.id}`} className="font-semibold text-primary hover:underline">
+                    {agent.name}
+                  </Link>
+                </div>
+                <p className="text-xs text-white/40 mt-1">
+                  This token will be linked to {agent.name}'s profile
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Status */}
@@ -304,5 +347,21 @@ export default function LaunchPage() {
         </motion.div>
       </div>
     </div>
+  );
+}
+
+// Export with Suspense wrapper
+export default function LaunchPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Rocket className="w-12 h-12 text-primary mx-auto mb-4 animate-pulse" />
+          <p className="text-white/60">Loading...</p>
+        </div>
+      </div>
+    }>
+      <LaunchPageContent />
+    </Suspense>
   );
 }
