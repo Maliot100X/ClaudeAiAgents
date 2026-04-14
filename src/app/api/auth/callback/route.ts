@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { setAuthSession, getUserByFid } from '@/lib/redis';
+import { setAuthSession, setUser } from '@/lib/redis';
+import { getUserByFid } from '@/lib/neynar';
 import { generateId } from '@/lib/utils';
 
 export async function POST(request: NextRequest) {
@@ -33,7 +34,10 @@ export async function POST(request: NextRequest) {
     await setAuthSession(token, sessionData);
     
     // Store/update user in Redis
-    await getUserByFid(fid);
+    const farcasterUser = await getUserByFid(fid);
+    if (farcasterUser) {
+      await setUser(fid, farcasterUser);
+    }
     
     return NextResponse.json({
       success: true,

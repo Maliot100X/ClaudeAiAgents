@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -10,8 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { formatNumber, formatAddress } from '@/lib/utils';
 
-// This is a placeholder for the individual agent detail page
-export default function AgentDetailPage() {
+// Inner component that uses search params
+function AgentDetailContent() {
   const searchParams = useSearchParams();
   const agentId = searchParams.get('id');
 
@@ -31,6 +31,12 @@ export default function AgentDetailPage() {
     isActive: true,
   };
 
+  const stats = [
+    { label: 'Reputation', value: formatNumber(agent.reputation), icon: Star },
+    { label: 'Tokens Launched', value: agent.tokensLaunched, icon: Rocket },
+    { label: 'Total Volume', value: `$${formatNumber(agent.totalVolume)}`, icon: TrendingUp },
+  ];
+
   return (
     <div className="min-h-screen py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
@@ -49,54 +55,67 @@ export default function AgentDetailPage() {
             <CardContent className="p-6">
               <div className="flex flex-col md:flex-row gap-6">
                 {/* Avatar */}
-                <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-primary/30 to-accent/30 flex items-center justify-center flex-shrink-0">
-                  <Bot className="w-12 h-12 text-primary" />
+                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center flex-shrink-0">
+                  <Bot className="w-10 h-10 text-white" />
                 </div>
 
                 {/* Info */}
                 <div className="flex-1">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h1 className="text-2xl font-bold text-white mb-1">{agent.name}</h1>
-                      <Link
-                        href={`https://warpcast.com/${agent.ownerUsername}`}
-                        target="_blank"
-                        className="text-sm text-primary hover:underline flex items-center gap-1"
-                      >
-                        @{agent.ownerUsername}
-                        <ExternalLink className="w-3 h-3" />
-                      </Link>
-                    </div>
-                    {agent.isActive && (
-                      <Badge variant="accent">Active</Badge>
-                    )}
+                  <div className="flex flex-wrap items-center gap-3 mb-2">
+                    <h1 className="text-2xl font-bold">{agent.name}</h1>
+                    <Badge variant="outline">{agent.isActive ? 'Active' : 'Inactive'}</Badge>
                   </div>
-
-                  <p className="text-white/60 mt-3">{agent.description}</p>
-
-                  {/* Skills */}
-                  <div className="flex flex-wrap gap-2 mt-4">
-                    {agent.skills.map((skill, i) => (
-                      <Badge key={i} variant="outline">{skill}</Badge>
-                    ))}
-                  </div>
+                  <p className="text-white/60 mb-2">{agent.description}</p>
+                  <p className="text-sm text-white/40">
+                    By @{agent.ownerUsername} • FID:{agent.ownerFid}
+                  </p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Stats Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            {[
-              { icon: Star, label: 'Reputation', value: agent.reputation, color: 'accent' },
-              { icon: Rocket, label: 'Launches', value: agent.tokensLaunched, color: 'primary' },
-              { icon: TrendingUp, label: 'Volume', value: `$${formatNumber(agent.totalVolume)}`, color: 'secondary' },
-              { label: 'Wallet', value: formatAddress(agent.bankrWalletAddress), color: 'base' },
-            ].map((stat, i) => (
-              <Card key={i} className="bg-white/5">
+          {/* Skills */}
+          <Card className="mb-6">
+            <CardHeader>
+              <h2 className="text-lg font-semibold">Skills</h2>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                {agent.skills.map((skill) => (
+                  <Badge key={skill} variant="secondary">
+                    {skill}
+                  </Badge>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Wallet */}
+          <Card className="mb-6">
+            <CardHeader>
+              <h2 className="text-lg font-semibold">Bankr Wallet</h2>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2 p-3 bg-white/5 rounded-xl">
+                <span className="text-sm font-mono">{agent.bankrWalletAddress}</span>
+                <Link
+                  href={`https://basescan.org/address/${agent.bankrWalletAddress}`}
+                  target="_blank"
+                  className="text-primary hover:text-primary/80"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Stats */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            {stats.map((stat) => (
+              <Card key={stat.label}>
                 <CardContent className="p-4 text-center">
-                  {stat.icon && <stat.icon className={`w-5 h-5 text-${stat.color} mx-auto mb-2`} />}
-                  <p className="text-xl font-bold text-white">{stat.value}</p>
+                  <stat.icon className="w-5 h-5 text-accent mx-auto mb-2" />
+                  <p className="text-2xl font-bold">{stat.value}</p>
                   <p className="text-xs text-white/50">{stat.label}</p>
                 </CardContent>
               </Card>
@@ -115,5 +134,21 @@ export default function AgentDetailPage() {
         </motion.div>
       </div>
     </div>
+  );
+}
+
+// Main page with Suspense wrapper
+export default function AgentDetailPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Bot className="w-12 h-12 text-primary mx-auto mb-4 animate-pulse" />
+          <p className="text-white/60">Loading agent...</p>
+        </div>
+      </div>
+    }>
+      <AgentDetailContent />
+    </Suspense>
   );
 }

@@ -189,7 +189,7 @@ const games = [
 export default function PlayPage() {
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
   const [gameScores, setGameScores] = useState<{ [key: string]: number }>({});
-  const { user, isAuthenticated } = useMiniApp();
+  const { user, isInFrame } = useMiniApp();
 
   const handleScore = useCallback((gameId: string, score: number) => {
     setGameScores(prev => ({
@@ -197,8 +197,8 @@ export default function PlayPage() {
       [gameId]: Math.max(prev[gameId] || 0, score),
     }));
 
-    // Save to server if authenticated
-    if (isAuthenticated && user) {
+    // Save to server if user is authenticated (has Farcaster context)
+    if (user) {
       fetch('/api/leaderboard', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -208,7 +208,7 @@ export default function PlayPage() {
         }),
       }).catch(console.error);
     }
-  }, [isAuthenticated, user]);
+  }, [user]);
 
   const selectedGameData = games.find(g => g.id === selectedGame);
   const GameComponent = selectedGameData?.component;

@@ -26,7 +26,7 @@ const AVAILABLE_SKILLS = [
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { user, isAuthenticated } = useMiniApp();
+  const { user, isInFrame } = useMiniApp();
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
   const [formData, setFormData] = useState({
@@ -48,8 +48,8 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!isAuthenticated || !user) {
-      setStatus({ type: 'error', message: 'Please sign in first' });
+    if (!user) {
+      setStatus({ type: 'error', message: 'Please sign in with Farcaster first' });
       return;
     }
 
@@ -91,7 +91,7 @@ export default function RegisterPage() {
     }
   };
 
-  if (!isAuthenticated) {
+  if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <Card className="max-w-md w-full text-center">
@@ -100,11 +100,11 @@ export default function RegisterPage() {
               <Bot className="w-8 h-8 text-primary" />
             </div>
             <CardTitle>Sign In Required</CardTitle>
-            <CardDescription>Please sign in to register an agent</CardDescription>
+            <CardDescription>Please sign in with Farcaster to register an agent</CardDescription>
           </CardHeader>
           <CardContent>
             <Button onClick={() => router.push('/signin')} className="w-full">
-              Sign In
+              Sign In with Farcaster
             </Button>
           </CardContent>
         </Card>

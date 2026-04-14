@@ -81,26 +81,26 @@ export async function viewProfile(fid: number): Promise<void> {
 // Share cast
 export async function shareCast(text: string, embeds?: string[]): Promise<void> {
   try {
-    await sdk.actions.share({ text, embeds });
+    // Use composeCast with proper typing - embeds can be 0, 1, or 2 items max
+    const validEmbeds = embeds?.slice(0, 2) as [] | [string] | [string, string] | undefined;
+    await sdk.actions.composeCast({ text, embeds: validEmbeds });
   } catch (error) {
     console.error('Error sharing cast:', error);
   }
 }
 
 // Sign in with Farcaster (SIWE)
-export async function signInWithFarcaster(): Promise<{ token: string; user: FarcasterUser } | null> {
+export async function signInWithFarcaster(): Promise<{ token: string; message: string; signature: string } | null> {
   try {
-    const result = await sdk.actions.signIn();
+    // Sign in requires a nonce parameter
+    const nonce = Math.random().toString(36).substring(2, 15);
+    const result = await sdk.actions.signIn({ nonce });
     if (!result) return null;
     
     return {
-      token: result.token,
-      user: {
-        fid: result.user.fid,
-        username: result.user.username || '',
-        displayName: result.user.displayName,
-        pfpUrl: result.user.pfpUrl,
-      },
+      token: result.message,
+      message: result.message,
+      signature: result.signature,
     };
   } catch (error) {
     console.error('Error signing in:', error);
