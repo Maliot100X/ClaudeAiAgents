@@ -34,6 +34,7 @@ export interface Token {
   chain: 'base' | 'ethereum';
   launchedBy: string;
   launchedByFid: number;
+  agentId?: string;
   launchedAt: string;
   totalSupply: string;
   metadataUri?: string;
