@@ -1,9 +1,13 @@
 import { Redis } from '@upstash/redis';
 
+// Clean environment variables (remove newlines/quotes)
+const redisUrl = (process.env.UPSTASH_REDIS_REST_URL || '').trim().replace(/["']/g, '');
+const redisToken = (process.env.UPSTASH_REDIS_REST_TOKEN || '').trim().replace(/["']/g, '');
+
 // Upstash Redis client for REST API
 export const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL || '',
-  token: process.env.UPSTASH_REDIS_REST_TOKEN || '',
+  url: redisUrl,
+  token: redisToken,
 });
 
 // Check if Redis is connected
