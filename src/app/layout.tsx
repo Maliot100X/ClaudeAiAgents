@@ -10,27 +10,27 @@ import { SpeedInsights } from '@vercel/speed-insights/next';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://mini-app-three-mauve.vercel.app'),
-  title: 'Claude AI Agents - Farcaster Base Mini App',
-  description: 'Launch AI-powered tokens, play games, and compete on leaderboards. The first proper Farcaster Mini App on Base with Bankr integration.',
-  keywords: ['farcaster', 'base', 'mini app', 'ai agents', 'token launch', 'bankr', 'neynar'],
-  authors: [{ name: 'Claude AI Agents' }],
+  metadataBase: new URL('https://claude-mini-app.vercel.app'),
+  title: 'Bankr Launch - Token Launchpad on Base',
+  description: 'Launch tokens on Base via Bankr Partner API. Register agents, earn 57% trading fees, and automate with AI.',
+  keywords: ['bankr', 'base', 'token launch', 'farcaster', 'mini app', 'ai agents'],
+  authors: [{ name: 'Bankr Launch' }],
   openGraph: {
-    title: 'Claude AI Agents - Farcaster Base Mini App',
-    description: 'Launch AI-powered tokens and compete on leaderboards',
+    title: 'Bankr Launch - Token Launchpad on Base',
+    description: 'Launch tokens on Base via Bankr Partner API',
     type: 'website',
-    url: 'https://mini-app-three-mauve.vercel.app',
+    url: 'https://claude-mini-app.vercel.app',
     images: [{
       url: '/og-image.png',
       width: 1200,
       height: 630,
-      alt: 'Claude AI Agents',
+      alt: 'Bankr Launch',
     }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Claude AI Agents',
-    description: 'Farcaster Base Mini App with AI-powered token launching',
+    title: 'Bankr Launch',
+    description: 'Token Launchpad on Base via Bankr Partner API',
     images: ['/og-image.png'],
   },
   icons: {
