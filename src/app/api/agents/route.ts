@@ -5,6 +5,9 @@ import { createAgentWallet, registerAgent, getAgentDetails } from '@/lib/bankr';
 import { generateApiKey, hashApiKey, validateApiKey } from '@/lib/api-key';
 import { generateId } from '@/lib/utils';
 
+export const dynamic = 'force-dynamic';
+
+
 // GET /api/agents - List all agents or get specific agent
 export async function GET(request: NextRequest) {
   try {

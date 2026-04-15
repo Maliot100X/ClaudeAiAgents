@@ -5,6 +5,8 @@ import { launchTokenViaBankr, getTokenPrice, getTokenStats } from '@/lib/bankr';
 import { uploadJSONToIPFS } from '@/lib/pinata';
 import { generateId } from '@/lib/utils';
 
+export const dynamic = 'force-dynamic';
+
 // POST /api/agents/launch - Launch token via agent's API key
 export async function POST(request: NextRequest) {
   try {
