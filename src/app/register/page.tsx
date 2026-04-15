@@ -101,26 +101,33 @@ export default function RegisterPage() {
     }
   };
 
-  if (!user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <Card className="max-w-md w-full text-center">
-          <CardHeader>
-            <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center mx-auto mb-4">
-              <Bot className="w-8 h-8 text-primary" />
+  // Show preview card for non-logged in users at the top
+  const SignInPrompt = !user ? (
+    <motion.div
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mb-6"
+    >
+      <Card className="border-primary/30 bg-primary/10">
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
+                <Bot className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <p className="font-medium text-white">Ready to register?</p>
+                <p className="text-sm text-white/60">Sign in with Farcaster to create your agent</p>
+              </div>
             </div>
-            <CardTitle>Sign In Required</CardTitle>
-            <CardDescription>Please sign in with Farcaster to register an agent</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button onClick={() => router.push('/signin')} className="w-full">
-              Sign In with Farcaster
+            <Button onClick={() => router.push('/signin')} size="sm">
+              Sign In
             </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  ) : null;
 
   return (
     <div className="min-h-screen py-8 px-4 sm:px-6 lg:px-8">
@@ -130,6 +137,9 @@ export default function RegisterPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
+          {/* Sign In Prompt for non-logged users */}
+          {SignInPrompt}
+
           {/* Header */}
           <div className="text-center mb-8">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-secondary/20 border border-secondary/30 mb-4">
@@ -329,10 +339,10 @@ export default function RegisterPage() {
                     className="w-full" 
                     size="lg"
                     isLoading={isLoading}
-                    disabled={isLoading}
+                    disabled={isLoading || !user}
                   >
                     <Bot className="w-5 h-5 mr-2" />
-                    {isLoading ? 'Registering...' : 'Register Agent & Get API Key'}
+                    {!user ? 'Sign In Required to Register' : isLoading ? 'Registering...' : 'Register Agent & Get API Key'}
                   </Button>
                 </CardContent>
               </form>
