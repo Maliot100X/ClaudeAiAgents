@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { 
   Bot, 
@@ -11,7 +12,9 @@ import {
   TrendingUp, 
   ExternalLink,
   Search,
-  Filter
+  Filter,
+  User,
+  ArrowLeft
 } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
 import type { Agent } from '@/types';
@@ -25,15 +28,22 @@ export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const { isAuthenticated } = useAppStore();
+  const { isAuthenticated, user } = useAppStore();
+  const searchParams = useSearchParams();
+  const ownerFid = searchParams.get('owner');
+  const isMyAgents = ownerFid && user && parseInt(ownerFid) === user.fid;
 
   useEffect(() => {
     fetchAgents();
-  }, []);
+  }, [ownerFid]);
 
   const fetchAgents = async () => {
     try {
-      const response = await fetch('/api/agents');
+      let url = '/api/agents';
+      if (ownerFid) {
+        url += `?ownerFid=${ownerFid}`;
+      }
+      const response = await fetch(url);
       const data = await response.json();
       
       if (data.success) {
@@ -72,21 +82,53 @@ export default function AgentsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-secondary/20 border border-secondary/30 mb-4">
-              <Bot className="w-4 h-4 text-secondary" />
-              <span className="text-sm font-medium text-secondary">AI Agents</span>
+              {isMyAgents ? (
+                <>
+                  <User className="w-4 h-4 text-secondary" />
+                  <span className="text-sm font-medium text-secondary">My Agents</span>
+                </>
+              ) : ownerFid ? (
+                <>
+                  <Bot className="w-4 h-4 text-secondary" />
+                  <span className="text-sm font-medium text-secondary">User's Agents</span>
+                </>
+              ) : (
+                <>
+                  <Bot className="w-4 h-4 text-secondary" />
+                  <span className="text-sm font-medium text-secondary">AI Agents</span>
+                </>
+              )}
             </div>
-            <h1 className="text-3xl font-bold text-gradient">Browse Agents</h1>
-            <p className="text-white/60 mt-1">Discover and hire specialized AI agents</p>
+            <h1 className="text-3xl font-bold text-gradient">
+              {isMyAgents ? 'My Agents' : ownerFid ? `FID:${ownerFid}'s Agents` : 'Browse Agents'}
+            </h1>
+            <p className="text-white/60 mt-1">
+              {isMyAgents 
+                ? 'Manage your registered AI agents and their token launches' 
+                : ownerFid 
+                  ? `Viewing all agents registered by FID:${ownerFid}`
+                  : 'Discover and hire specialized AI agents'}
+            </p>
           </div>
 
-          {isAuthenticated && (
-            <Link href="/register">
-              <Button className="gap-2">
-                <Plus className="w-4 h-4" />
-                Register Agent
-              </Button>
-            </Link>
-          )}
+          <div className="flex gap-2">
+            {ownerFid && (
+              <Link href="/agents">
+                <Button variant="outline" className="gap-2">
+                  <ArrowLeft className="w-4 h-4" />
+                  All Agents
+                </Button>
+              </Link>
+            )}
+            {isAuthenticated && (
+              <Link href="/register">
+                <Button className="gap-2">
+                  <Plus className="w-4 h-4" />
+                  Register Agent
+                </Button>
+              </Link>
+            )}
+          </div>
         </div>
 
         {/* Search */}

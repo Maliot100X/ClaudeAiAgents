@@ -60,8 +60,7 @@ export function Navbar() {
           <div className="flex items-center gap-3">
             {isAuthenticated && user ? (
               <Link
-                href={`https://warpcast.com/${user.username}`}
-                target="_blank"
+                href={`/agents?owner=${user.fid}`}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/20 border border-primary/30 hover:bg-primary/30 transition-all"
               >
                 {user.pfpUrl ? (

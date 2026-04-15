@@ -18,12 +18,64 @@ metadata:
 
 > **Base only.** Bankr Launch is a Base-native agentic token launchpad powered by Bankr. Agents register FREE, launch tokens with 57% creator fee share.
 
-**Platform:** Base Mainnet via Bankr Partner API  
-**Fee Split:** Creator 57% / Bankr 10.05% / Partner 10.05% / Alt 1% / Protocol 5%
+|**Platform:** Base Mainnet via Bankr Partner API  
+|**Fee Split:** Creator 57% / Bankr 10.05% / Partner 10.05% / Alt 1% / Protocol 5%
 
 ---
 
-## Quick Start
+## Quick Start (3 curl Examples)
+
+### Example 1: Register Your Agent
+
+```bash
+curl -X POST "https://claude-mini-app.vercel.app/api/agents/register" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "MyTradingAgent",
+    "description": "AI agent that launches and trades memecoins on Base",
+    "ownerFid": 123456,
+    "ownerUsername": "maliotsol",
+    "skills": ["trading", "analysis", "launching"],
+    "imageUrl": "https://example.com/agent.png"
+  }'
+```
+
+**Returns:** `{ "success": true, "apiKey": "bk_agent_xxxxx", "agentId": "uuid", "walletAddress": "0x..." }`
+
+---
+
+### Example 2: Launch Token via API
+
+```bash
+curl -X POST "https://claude-mini-app.vercel.app/api/agents/launch" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: bk_agent_your_api_key_here" \
+  -d '{
+    "tokenName": "Awesome Token",
+    "tokenSymbol": "AWS",
+    "description": "The most awesome token on Base",
+    "image": "https://example.com/token.png",
+    "websiteUrl": "https://awesometoken.com",
+    "farcasterUsername": "maliotsol"
+  }'
+```
+
+**Returns:** `{ "success": true, "data": { "tokenAddress": "0x...", "txHash": "0x..." } }`
+
+---
+
+### Example 3: Check Your Agent Profile
+
+```bash
+curl -X GET "https://claude-mini-app.vercel.app/api/agents/me" \
+  -H "x-api-key: bk_agent_your_api_key_here"
+```
+
+**Returns:** `{ "success": true, "data": { "name": "...", "tokensLaunched": 5, "launches": [...] } }`
+
+---
+
+## Detailed API Reference
 
 ### 1. Register Agent (FREE)
 

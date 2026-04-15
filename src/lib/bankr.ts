@@ -2,230 +2,420 @@ import axios from 'axios';
 import type { BankrWallet, TokenLaunchResult } from '@/types';
 
 const BANKR_API_URL = process.env.BANKR_API_URL || 'https://api.bankr.bot';
-const PARTNER_KEY = process.env.BANKR_API_KEY || '';
+const BANKR_API_KEY = process.env.BANKR_API_KEY || '';
 
-// Partner API client for token launches
-const partnerApi = axios.create({
-  baseURL: BANKR_API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-    'X-Partner-Key': PARTNER_KEY,
-  },
-  timeout: 60000, // 60 second timeout for deployments
-});
+if (!BANKR_API_KEY) {
+  console.error('❌ BANKR_API_KEY not configured');
+}
 
-// Regular API client for other operations
+// Bankr Agent API client
 const api = axios.create({
   baseURL: BANKR_API_URL,
   headers: {
-    'Authorization': `Bearer ${PARTNER_KEY}`,
     'Content-Type': 'application/json',
+    'x-api-key': BANKR_API_KEY,
   },
-  timeout: 30000,
+  timeout: 120000, // 2 minutes for token deployments
 });
 
 // Add response interceptor for error handling
-partnerApi.interceptors.response.use(
+api.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.error('Bankr Partner API Error:', {
+    console.error('Bankr API Error:', {
       status: error.response?.status,
       data: error.response?.data,
       endpoint: error.config?.url,
+      message: error.message,
     });
     return Promise.reject(error);
   }
 );
 
 // ============================================
-// TOKEN LAUNCH - PARTNER DEPLOY API
+// BANKR AGENT API - NATURAL LANGUAGE INTERFACE
+// ============================================
+
+export interface PromptResponse {
+  success: boolean;
+  jobId?: string;
+  threadId?: string;
+  status?: string;
+  message?: string;
+  error?: string;
+}
+
+export interface JobStatusResponse {
+  success: boolean;
+  jobId: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
+  prompt?: string;
+  response?: string;
+  createdAt?: string;
+  completedAt?: string;
+  processingTime?: number;
+  statusUpdates?: Array<{ message: string; timestamp: string }>;
+  error?: string;
+}
+
+// Submit a natural language prompt to Bankr Agent
+export async function submitPrompt(prompt: string): Promise<PromptResponse> {
+  try {
+    if (!BANKR_API_KEY) {
+      throw new Error('BANKR_API_KEY not configured');
+    }
+
+    console.log('🤖 Submitting prompt to Bankr:', prompt);
+
+    const response = await api.post('/agent/prompt', {
+      prompt,
+    });
+
+    const data = response.data;
+
+    if (!response.data?.success || !response.data?.jobId) {
+      throw new Error(data.message || data.error || 'Failed to submit prompt');
+    }
+
+    return {
+      success: true,
+      jobId: data.jobId,
+      threadId: data.threadId,
+      status: data.status,
+      message: data.message,
+    };
+  } catch (error: any) {
+    console.error('Error submitting prompt:', error.message);
+    return {
+      success: false,
+      error: error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to submit prompt',
+    };
+  }
+}
+
+// Get job status
+export async function getJobStatus(jobId: string): Promise<JobStatusResponse> {
+  try {
+    const response = await api.get(`/agent/job/${jobId}`);
+    return response.data;
+  } catch (error: any) {
+    console.error('Error fetching job status:', error.message);
+    return {
+      success: false,
+      jobId,
+      status: 'failed',
+      error: error.response?.data?.message || error.message || 'Failed to fetch job status',
+    };
+  }
+}
+
+// Poll for job completion with callbacks
+export async function pollJobStatus(
+  jobId: string,
+  onStatusUpdate?: (status: string, message: string) => void,
+  options?: {
+    intervalMs?: number;
+    maxAttempts?: number;
+    onAgentStatusUpdate?: (message: string) => void;
+  }
+): Promise<JobStatusResponse> {
+  const {
+    intervalMs = 2000,
+    maxAttempts = 150,
+    onAgentStatusUpdate,
+  } = options || {};
+
+  let lastStatus: string | null = null;
+  let lastStatusUpdateCount = 0;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const status = await getJobStatus(jobId);
+
+    if (!status.success) {
+      throw new Error(status.error || 'Failed to fetch job status');
+    }
+
+    // Check for new agent status updates
+    if (
+      onAgentStatusUpdate &&
+      status.statusUpdates &&
+      status.statusUpdates.length > lastStatusUpdateCount
+    ) {
+      const newUpdates = status.statusUpdates.slice(lastStatusUpdateCount);
+      for (const update of newUpdates) {
+        onAgentStatusUpdate(update.message);
+      }
+      lastStatusUpdateCount = status.statusUpdates.length;
+    }
+
+    // Notify about job status changes
+    if (status.status !== lastStatus && onStatusUpdate) {
+      const statusMessage = getStatusMessage(status.status);
+      onStatusUpdate(status.status, statusMessage);
+      lastStatus = status.status;
+    }
+
+    // Check if job is complete
+    if (status.status === 'completed') {
+      return status;
+    }
+
+    if (status.status === 'failed' || status.status === 'cancelled') {
+      throw new Error(status.error || `Job ${status.status}`);
+    }
+
+    // Wait before next poll
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  throw new Error('Polling timeout - job took too long to complete');
+}
+
+function getStatusMessage(status: string): string {
+  switch (status) {
+    case 'pending':
+      return '⏳ Waiting to start...';
+    case 'processing':
+      return '🤖 Agent is working...';
+    case 'completed':
+      return '✅ Complete!';
+    case 'failed':
+      return '❌ Failed';
+    case 'cancelled':
+      return '🚫 Cancelled';
+    default:
+      return '⏳ Processing...';
+  }
+}
+
+// Cancel a job
+export async function cancelJob(jobId: string): Promise<boolean> {
+  try {
+    await api.post(`/agent/job/${jobId}/cancel`);
+    return true;
+  } catch (error: any) {
+    console.error('Error cancelling job:', error.message);
+    return false;
+  }
+}
+
+// ============================================
+// TOKEN LAUNCH VIA NATURAL LANGUAGE
 // ============================================
 
 export interface LaunchTokenParams {
   tokenName: string;
-  tokenSymbol?: string;
+  tokenSymbol: string;
   description?: string;
-  image?: string; // URL to image
-  tweetUrl?: string;
+  image?: string;
   websiteUrl?: string;
-  farcasterUsername?: string;
-  farcasterFid?: number;
+  twitterUrl?: string;
+  telegramUrl?: string;
+  tweetUrl?: string;
   walletAddress?: string;
+  farcasterUsername?: string;
+  feeRecipient?: string; // wallet address or @username
   simulateOnly?: boolean;
 }
 
 export interface LaunchTokenResponse {
   success: boolean;
   tokenAddress?: string;
-  poolId?: string;
   txHash?: string;
-  activityId?: string;
-  chain?: string;
-  simulated?: boolean;
-  feeDistribution?: {
-    creator: { address: string; bps: number };
-    bankr: { address: string; bps: number };
-    partner: { address: string; bps: number };
-    alt: { address: string; bps: number };
-    protocol: { address: string; bps: number };
-  };
+  message?: string;
+  jobId?: string;
   error?: string;
 }
 
-// Launch token via Bankr Partner Deploy API
-export async function launchTokenViaPartner(
+// Launch token via Bankr Agent API using natural language
+export async function launchTokenViaBankr(
   params: LaunchTokenParams
 ): Promise<LaunchTokenResponse> {
   try {
-    console.log('Launching token via Bankr Partner API:', params.tokenName);
+    console.log('🚀 Launching token via Bankr:', params.tokenName);
 
-    // Determine fee recipient based on available info
-    let feeRecipient: { type: string; value: string };
+    // Build natural language prompt
+    let prompt = `deploy a token called "${params.tokenName}"`;
     
-    if (params.walletAddress) {
-      // Use wallet address directly
-      feeRecipient = {
-        type: 'wallet',
-        value: params.walletAddress,
-      };
-    } else if (params.farcasterUsername) {
-      // Use Farcaster username - resolves to their verified address
-      feeRecipient = {
-        type: 'farcaster',
-        value: params.farcasterUsername.replace('@', ''), // Remove @ if present
-      };
-    } else if (params.farcasterFid) {
-      // Use FID as wallet type with custody address
-      // This requires getting the custody address from Neynar first
-      throw new Error('FID-only not supported. Please provide walletAddress or farcasterUsername');
-    } else {
-      throw new Error('feeRecipient required: provide walletAddress or farcasterUsername');
+    if (params.tokenSymbol) {
+      prompt += ` with symbol ${params.tokenSymbol}`;
     }
 
-    const requestBody = {
-      tokenName: params.tokenName,
-      tokenSymbol: params.tokenSymbol,
-      description: params.description,
-      image: params.image,
-      tweetUrl: params.tweetUrl,
-      websiteUrl: params.websiteUrl,
-      feeRecipient,
-      simulateOnly: params.simulateOnly || false,
-    };
+    if (params.description) {
+      prompt += `. Description: ${params.description}`;
+    }
 
-    console.log('Partner API request:', JSON.stringify(requestBody, null, 2));
+    if (params.image) {
+      prompt += `. Logo: ${params.image}`;
+    }
 
-    const response = await partnerApi.post('/token-launches/deploy', requestBody);
+    if (params.websiteUrl) {
+      prompt += `. Website: ${params.websiteUrl}`;
+    }
 
-    const data = response.data;
+    if (params.twitterUrl) {
+      prompt += `. Twitter: ${params.twitterUrl}`;
+    }
+
+    if (params.telegramUrl) {
+      prompt += `. Telegram: ${params.telegramUrl}`;
+    }
+
+    // Submit prompt
+    const submitResult = await submitPrompt(prompt);
+
+    if (!submitResult.success || !submitResult.jobId) {
+      throw new Error(submitResult.error || 'Failed to submit token launch prompt');
+    }
+
+    console.log('⏳ Waiting for token deployment, jobId:', submitResult.jobId);
+
+    // Poll for completion
+    const finalStatus = await pollJobStatus(submitResult.jobId);
+
+    if (finalStatus.status !== 'completed') {
+      throw new Error(finalStatus.error || 'Token launch failed');
+    }
+
+    // Extract token address from response if available
+    const responseText = finalStatus.response || '';
+    const tokenAddressMatch = responseText.match(/0x[a-fA-F0-9]{40}/);
+    const tokenAddress = tokenAddressMatch ? tokenAddressMatch[0] : undefined;
 
     return {
       success: true,
-      tokenAddress: data.tokenAddress,
-      poolId: data.poolId,
-      txHash: data.txHash,
-      activityId: data.activityId,
-      chain: data.chain || 'base',
-      simulated: data.simulated || false,
-      feeDistribution: data.feeDistribution,
+      tokenAddress,
+      message: finalStatus.response,
+      jobId: submitResult.jobId,
     };
   } catch (error: any) {
-    console.error('Error launching token via Partner API:', error.message);
-    
-    // Return detailed error
+    console.error('Error launching token:', error.message);
     return {
       success: false,
-      error: error.response?.data?.message || error.response?.data?.error || error.message || 'Token launch failed',
+      error: error.message || 'Token launch failed',
     };
   }
 }
 
-// Simulate token launch (get predicted address without deploying)
-export async function simulateTokenLaunch(
-  params: Omit<LaunchTokenParams, 'simulateOnly'>
-): Promise<LaunchTokenResponse> {
-  return launchTokenViaPartner({ ...params, simulateOnly: true });
+// ============================================
+// WALLET OPERATIONS (USING AGENT API)
+// ============================================
+
+// Use the user's own Bankr wallet - no need to create separate wallets
+// The API key is tied to a specific wallet
+export async function getBankrWalletInfo(): Promise<BankrWallet | null> {
+  try {
+    const result = await submitPrompt('what is my wallet address?');
+    
+    if (!result.success || !result.jobId) {
+      return null;
+    }
+
+    const status = await pollJobStatus(result.jobId);
+    
+    if (status.status !== 'completed') {
+      return null;
+    }
+
+    // Extract wallet address from response
+    const responseText = status.response || '';
+    const addressMatch = responseText.match(/0x[a-fA-F0-9]{40}/);
+    
+    if (!addressMatch) {
+      return null;
+    }
+
+    return {
+      address: addressMatch[0],
+      chain: 'base',
+      createdAt: new Date().toISOString(),
+    };
+  } catch (error: any) {
+    console.error('Error getting wallet info:', error.message);
+    return null;
+  }
+}
+
+// Get wallet balance using agent
+export async function getWalletBalance(): Promise<string> {
+  try {
+    const result = await submitPrompt('what is my ETH balance?');
+    
+    if (!result.success || !result.jobId) {
+      return '0';
+    }
+
+    const status = await pollJobStatus(result.jobId);
+    
+    if (status.status !== 'completed') {
+      return '0';
+    }
+
+    // Try to extract balance from response
+    const responseText = status.response || '';
+    const balanceMatch = responseText.match(/(\d+\.?\d*)\s*ETH/i);
+    
+    return balanceMatch ? balanceMatch[1] : '0';
+  } catch (error: any) {
+    console.error('Error getting wallet balance:', error.message);
+    return '0';
+  }
 }
 
 // ============================================
-// WALLET OPERATIONS
+// AGENT REGISTRATION (SIMPLIFIED)
 // ============================================
 
-// Create a new wallet for an agent
-export async function createAgentWallet(agentId: string, chain: string = 'base'): Promise<BankrWallet | null> {
+export async function registerAgent(params: {
+  name: string;
+  description: string;
+  ownerFid: number;
+  ownerUsername: string;
+  skills: string[];
+  imageUrl?: string;
+}): Promise<{ success: boolean; agentId?: string; walletAddress?: string; error?: string }> {
   try {
-    console.log(`Creating wallet for agent ${agentId} on ${chain}`);
+    console.log('📝 Registering agent:', params.name);
     
-    const response = await api.post('/v1/wallets', {
+    // Generate agent ID
+    const agentId = `agent_${Date.now()}_${params.ownerFid}`;
+    
+    // Get wallet address from Bankr
+    const walletInfo = await getBankrWalletInfo();
+    
+    if (!walletInfo) {
+      // Use fallback - the user's wallet from their Bankr account
+      const fallbackWallet = process.env.BANKR_WALLET_ADDRESS;
+      if (!fallbackWallet) {
+        return {
+          success: false,
+          error: 'Could not retrieve wallet address from Bankr',
+        };
+      }
+      
+      return {
+        success: true,
+        agentId,
+        walletAddress: fallbackWallet,
+      };
+    }
+    
+    return {
+      success: true,
       agentId,
-      chain,
-      type: 'agent',
-      metadata: {
-        createdBy: 'farcaster-miniapp',
-        createdAt: new Date().toISOString(),
-      },
-    });
-    
-    if (!response.data?.address) {
-      console.error('Invalid wallet response:', response.data);
-      return null;
-    }
-    
-    return {
-      address: response.data.address,
-      chain: response.data.chain || chain,
-      createdAt: response.data.createdAt || new Date().toISOString(),
-      walletId: response.data.walletId || response.data.id,
+      walletAddress: walletInfo.address,
     };
   } catch (error: any) {
-    console.error('Error creating agent wallet:', error.message);
-    return null;
-  }
-}
-
-// Get wallet by agent ID
-export async function getAgentWallet(agentId: string): Promise<BankrWallet | null> {
-  try {
-    const response = await api.get(`/v1/wallets/agent/${agentId}`);
-    
-    if (!response.data?.address) {
-      return null;
-    }
-    
+    console.error('Error registering agent:', error.message);
     return {
-      address: response.data.address,
-      chain: response.data.chain,
-      createdAt: response.data.createdAt,
-      walletId: response.data.walletId || response.data.id,
+      success: false,
+      error: error.message || 'Failed to register agent',
     };
-  } catch (error: any) {
-    console.error('Error fetching agent wallet:', error.message);
-    return null;
-  }
-}
-
-// Get wallet balance
-export async function getWalletBalance(address: string, chain: string = 'base'): Promise<{ 
-  native: string; 
-  tokens: Array<{ symbol: string; balance: string; usdValue?: string }> 
-}> {
-  try {
-    const response = await api.get(`/v1/wallets/${address}/balance`, {
-      params: { chain },
-    });
-    
-    return {
-      native: response.data.native || '0',
-      tokens: response.data.tokens || [],
-    };
-  } catch (error: any) {
-    console.error('Error fetching wallet balance:', error.message);
-    return { native: '0', tokens: [] };
   }
 }
 
 // ============================================
-// TOKEN OPERATIONS (LEGACY - FOR COMPATIBILITY)
+// LEGACY COMPATIBILITY
 // ============================================
 
 export async function launchToken(params: {
@@ -240,200 +430,66 @@ export async function launchToken(params: {
     telegram?: string;
     website?: string;
   };
-  farcasterCastHash?: string;
 }): Promise<TokenLaunchResult> {
-  // Convert to Partner API format
-  const result = await launchTokenViaPartner({
+  const result = await launchTokenViaBankr({
     tokenName: params.name,
     tokenSymbol: params.symbol,
     description: params.description,
     image: params.imageUrl,
     websiteUrl: params.socialLinks?.website,
-    walletAddress: params.agentWallet,
+    twitterUrl: params.socialLinks?.twitter,
+    telegramUrl: params.socialLinks?.telegram,
+    feeRecipient: params.agentWallet,
   });
 
   return {
     success: result.success,
     contractAddress: result.tokenAddress,
-    txHash: result.txHash,
+    txHash: undefined, // Bankr Agent API doesn't return txHash directly
     error: result.error,
   };
 }
 
-// Get token details from Bankr
-export async function getTokenDetails(contractAddress: string): Promise<any> {
-  try {
-    const response = await api.get(`/v1/tokens/${contractAddress}`);
-    return response.data;
-  } catch (error: any) {
-    console.error('Error fetching token details:', error.message);
-    return null;
+// Create agent wallet - now just returns the existing Bankr wallet
+export async function createAgentWallet(agentId: string, chain: string = 'base'): Promise<BankrWallet | null> {
+  const walletInfo = await getBankrWalletInfo();
+  
+  if (walletInfo) {
+    return {
+      ...walletInfo,
+      walletId: agentId,
+    };
   }
+  
+  // Fallback to configured wallet
+  const fallbackWallet = process.env.BANKR_WALLET_ADDRESS;
+  if (fallbackWallet) {
+    return {
+      address: fallbackWallet,
+      chain,
+      createdAt: new Date().toISOString(),
+      walletId: agentId,
+    };
+  }
+  
+  return null;
 }
 
-// Get token price
+// ============================================
+// TOKEN INFO (STUBS FOR COMPATIBILITY)
+// ============================================
+
 export async function getTokenPrice(contractAddress: string): Promise<number> {
-  try {
-    const response = await api.get(`/v1/tokens/${contractAddress}/price`);
-    return response.data.price || 0;
-  } catch (error: any) {
-    console.error('Error fetching token price:', error.message);
-    return 0;
-  }
+  // TODO: Implement via Bankr Agent API if available
+  // For now, return 0 as we can't query price directly
+  return 0;
 }
 
-// Get token stats
 export async function getTokenStats(contractAddress: string): Promise<any> {
-  try {
-    const response = await api.get(`/v1/tokens/${contractAddress}/stats`);
-    return response.data;
-  } catch (error: any) {
-    console.error('Error fetching token stats:', error.message);
-    return null;
-  }
+  // TODO: Implement via Bankr Agent API if available
+  // For now, return null as we can't query stats directly
+  return null;
 }
 
-// ============================================
-// AGENT REGISTRATION
-// ============================================
-
-export async function registerAgent(params: {
-  name: string;
-  description: string;
-  ownerFid: number;
-  ownerUsername: string;
-  skills: string[];
-  imageUrl?: string;
-}): Promise<{ success: boolean; agentId?: string; walletAddress?: string; error?: string }> {
-  try {
-    console.log('Registering agent with Bankr:', params.name);
-    
-    // First create a wallet for the agent
-    const tempAgentId = `agent_${Date.now()}_${params.ownerFid}`;
-    const wallet = await createAgentWallet(tempAgentId, 'base');
-    
-    if (!wallet) {
-      return {
-        success: false,
-        error: 'Failed to create agent wallet',
-      };
-    }
-    
-    // Register agent with Bankr
-    const response = await api.post('/v1/agents/register', {
-      name: params.name,
-      description: params.description,
-      ownerFid: params.ownerFid,
-      ownerUsername: params.ownerUsername,
-      skills: params.skills,
-      imageUrl: params.imageUrl,
-      walletAddress: wallet.address,
-      chain: 'base',
-      metadata: {
-        registeredAt: new Date().toISOString(),
-        platform: 'farcaster-miniapp',
-      },
-    });
-    
-    return {
-      success: true,
-      agentId: response.data.agentId || tempAgentId,
-      walletAddress: wallet.address,
-    };
-  } catch (error: any) {
-    console.error('Error registering agent:', error.message);
-    return {
-      success: false,
-      error: error.response?.data?.message || error.message || 'Failed to register agent',
-    };
-  }
-}
-
-// Get agent details from Bankr
-export async function getAgentDetails(agentId: string): Promise<any> {
-  try {
-    const response = await api.get(`/v1/agents/${agentId}`);
-    return response.data;
-  } catch (error: any) {
-    console.error('Error fetching agent details:', error.message);
-    return null;
-  }
-}
-
-// ============================================
-// LEADERBOARD
-// ============================================
-
-export async function getLeaderboard(type: 'volume' | 'tokens' | 'reputation' = 'volume', limit = 100): Promise<any[]> {
-  try {
-    const response = await api.get('/v1/leaderboard', {
-      params: { type, limit },
-    });
-    return response.data.leaderboard || [];
-  } catch (error: any) {
-    console.error('Error fetching leaderboard:', error.message);
-    return [];
-  }
-}
-
-// ============================================
-// SWAP & LIQUIDITY (LEGACY)
-// ============================================
-
-export async function executeSwap(params: {
-  tokenIn: string;
-  tokenOut: string;
-  amount: string;
-  walletAddress: string;
-  slippage?: number;
-}): Promise<{ success: boolean; txHash?: string; error?: string }> {
-  try {
-    const response = await api.post('/v1/swap', {
-      tokenIn: params.tokenIn,
-      tokenOut: params.tokenOut,
-      amount: params.amount,
-      wallet: params.walletAddress,
-      slippage: params.slippage || 0.5,
-      chain: 'base',
-    });
-    
-    return {
-      success: true,
-      txHash: response.data.txHash,
-    };
-  } catch (error: any) {
-    console.error('Error executing swap:', error.message);
-    return {
-      success: false,
-      error: error.response?.data?.message || error.message || 'Failed to execute swap',
-    };
-  }
-}
-
-export async function provideLiquidity(params: {
-  token: string;
-  amount: string;
-  walletAddress: string;
-}): Promise<{ success: boolean; txHash?: string; error?: string }> {
-  try {
-    const response = await api.post('/v1/liquidity/add', {
-      token: params.token,
-      amount: params.amount,
-      wallet: params.walletAddress,
-      chain: 'base',
-    });
-    
-    return {
-      success: true,
-      txHash: response.data.txHash,
-    };
-  } catch (error: any) {
-    console.error('Error providing liquidity:', error.message);
-    return {
-      success: false,
-      error: error.response?.data?.message || error.message || 'Failed to provide liquidity',
-    };
-  }
-}
-
-export { api, partnerApi };
+export { api };
+export default api;

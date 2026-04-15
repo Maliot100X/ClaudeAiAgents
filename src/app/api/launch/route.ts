@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { setToken, getAllTokens } from '@/lib/redis';
 import { getUserByFid } from '@/lib/neynar';
-import { launchTokenViaPartner, getTokenPrice, getTokenStats } from '@/lib/bankr';
+import { launchTokenViaBankr, getTokenPrice, getTokenStats } from '@/lib/bankr';
 import { uploadJSONToIPFS } from '@/lib/pinata';
 import { generateId } from '@/lib/utils';
 
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Launch token via Bankr Partner API
-    const launchResult = await launchTokenViaPartner({
+    const launchResult = await launchTokenViaBankr({
       tokenName: name,
       tokenSymbol: cleanSymbol || undefined,
       description: description || undefined,
