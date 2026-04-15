@@ -30,7 +30,7 @@ export function Navbar() {
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center group-hover:shadow-lg group-hover:shadow-primary/30 transition-all">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
-            <span className="font-bold text-xl text-gradient hidden sm:block">Claude AI</span>
+            <span className="font-bold text-xl text-gradient hidden sm:block">Bankr Launch</span>
           </Link>
 
           {/* Desktop Nav */}

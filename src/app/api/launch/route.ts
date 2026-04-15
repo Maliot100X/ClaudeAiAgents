@@ -96,15 +96,13 @@ export async function POST(request: NextRequest) {
     
     // Launch token via Bankr Partner API
     const launchResult = await launchTokenViaBankr({
-      tokenName: name,
-      tokenSymbol: cleanSymbol || undefined,
+      name,
+      symbol: cleanSymbol || undefined,
       description: description || undefined,
-      image: imageUrl || undefined,
-      websiteUrl: websiteUrl || undefined,
-      tweetUrl: twitterUrl || undefined,
-      walletAddress: feeRecipientWallet || undefined,
-      farcasterUsername: feeRecipientFarcaster || undefined,
-      simulateOnly,
+      imageUrl: imageUrl || undefined,
+      website: websiteUrl || undefined,
+      twitter: twitterUrl || undefined,
+      chain: 'base',
     });
     
     if (!launchResult.success) {
@@ -120,9 +118,8 @@ export async function POST(request: NextRequest) {
         success: true,
         simulated: true,
         data: {
-          predictedAddress: launchResult.tokenAddress,
-          poolId: launchResult.poolId,
-          feeDistribution: launchResult.feeDistribution,
+          predictedAddress: launchResult.contractAddress,
+          txHash: launchResult.txHash,
         },
         message: 'Token deployment simulated. Predicted contract address received.',
       }, { status: 200 });
@@ -131,11 +128,11 @@ export async function POST(request: NextRequest) {
     // Get initial price and stats
     let price = 0;
     let stats = null;
-    if (launchResult.tokenAddress) {
+    if (launchResult.contractAddress) {
       try {
         [price, stats] = await Promise.all([
-          getTokenPrice(launchResult.tokenAddress),
-          getTokenStats(launchResult.tokenAddress),
+          getTokenPrice(launchResult.contractAddress),
+          getTokenStats(launchResult.contractAddress),
         ]);
       } catch (e) {
         console.log('Could not fetch initial price/stats');
@@ -150,21 +147,18 @@ export async function POST(request: NextRequest) {
       description: description || '',
       imageUrl: imageUrl || null,
       metadataUri: ipfsUrl,
-      contractAddress: launchResult.tokenAddress || '',
+      contractAddress: launchResult.contractAddress || '',
       chain: 'base' as const,
       launchedBy: launcher?.username || farcasterUsername || 'unknown',
       launchedByFid: launchedByFid || 0,
       agentId: agentId || null,
       launchedAt: new Date().toISOString(),
       txHash: launchResult.txHash,
-      poolId: launchResult.poolId,
-      activityId: launchResult.activityId,
       marketCap: stats?.marketCap || 0,
       volume24h: stats?.volume24h || 0,
       price: price,
       priceChange24h: stats?.priceChange24h || 0,
       holders: stats?.holders || 0,
-      feeDistribution: launchResult.feeDistribution,
     };
     
     // Save to Redis
@@ -174,7 +168,7 @@ export async function POST(request: NextRequest) {
       success: true,
       data: token,
       message: 'Token launched successfully on Base via Bankr Partner API',
-      bankrUrl: `https://bankr.bot/token/${launchResult.tokenAddress}`,
+      bankrUrl: `https://bankr.bot/token/${launchResult.contractAddress}`,
     }, { status: 201 });
     
   } catch (error: any) {

@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     }
     
     // Get wallet balance from Bankr
-    const balance = await getWalletBalance(agent.bankrWalletAddress, 'base');
+    const balance = await getWalletBalance();
     
     return NextResponse.json({
       success: true,
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
       data: {
         address: agent.bankrWalletAddress,
         chain: 'base',
-        ...balance,
+        balance: balance,
       },
     }, { status: 200 });
     

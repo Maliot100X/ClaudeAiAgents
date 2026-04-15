@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAllTokens, setToken, getToken } from '@/lib/redis';
 import { getUserByFid } from '@/lib/neynar';
-import { launchToken } from '@/lib/bankr';
+import { launchTokenViaBankr as launchToken } from '@/lib/bankr';
 import { uploadFileToIPFS, uploadJSONToIPFS } from '@/lib/pinata';
 import { generateId } from '@/lib/utils';
 
@@ -93,8 +93,10 @@ export async function POST(request: NextRequest) {
       description,
       imageUrl: metadataUrl || undefined,
       initialSupply: initialSupply || '1000000',
-      agentWallet: agentWallet || launcher.custodyAddress || '',
-      socialLinks,
+      website: socialLinks?.website,
+      twitter: socialLinks?.twitter,
+      telegram: socialLinks?.telegram,
+      chain: 'base',
     });
     
     if (!launchResult.success) {

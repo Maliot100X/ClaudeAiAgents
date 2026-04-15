@@ -14,7 +14,7 @@ export function Footer() {
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
               <Sparkles className="w-4 h-4 text-white" />
             </div>
-            <span className="font-bold text-lg text-gradient">Claude AI Agents</span>
+            <span className="font-bold text-lg text-gradient">Bankr Launch</span>
           </div>
 
           {/* Links */}
@@ -55,8 +55,8 @@ export function Footer() {
         </div>
 
         <div className="mt-8 pt-6 border-t border-white/5 text-center text-xs text-white/40">
-          <p>Powered by Farcaster • Base • Bankr • Neynar • Claude AI</p>
-          <p className="mt-1">© 2024 Claude AI Agents. All rights reserved.</p>
+          <p>Powered by Bankr • Base • Farcaster • Neynar</p>
+          <p className="mt-1">© 2024 Bankr Launch. All rights reserved.</p>
         </div>
       </div>
     </footer>

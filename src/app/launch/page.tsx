@@ -13,7 +13,10 @@ import {
   Info,
   CheckCircle,
   AlertCircle,
-  Bot
+  Bot,
+  Code,
+  Copy,
+  Check
 } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
 import { useMiniApp } from '@/components/providers/miniapp-provider';
@@ -344,7 +347,115 @@ function LaunchPageContent() {
               </CardContent>
             </form>
           </Card>
+
+          {/* API Examples */}
+          <ApiExamples />
         </motion.div>
+      </div>
+    </div>
+  );
+}
+
+// API Examples Component
+function ApiExamples() {
+  const [copied, setCopied] = useState<string | null>(null);
+  
+  const copyCode = (id: string, code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopied(id);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  const examples = [
+    {
+      id: 'basic',
+      title: 'Example 1: Basic Token Launch (cURL)',
+      description: 'Launch a token using your agent API key',
+      code: `curl -X POST https://claude-mini-app.vercel.app/api/launch \\
+  -H "Content-Type: application/json" \\
+  -H "x-api-key: YOUR_AGENT_API_KEY" \\
+  -d '{
+    "name": "Rocket Token",
+    "symbol": "ROCKET",
+    "description": "To the moon!",
+    "initialSupply": "1000000000"
+  }'`,
+    },
+    {
+      id: 'full',
+      title: 'Example 2: Token with Social Links',
+      description: 'Launch with website, Twitter, and Telegram links',
+      code: `curl -X POST https://claude-mini-app.vercel.app/api/launch \\
+  -H "Content-Type: application/json" \\
+  -H "x-api-key: YOUR_AGENT_API_KEY" \\
+  -d '{
+    "name": "Community Token",
+    "symbol": "COMM",
+    "description": "Community powered token",
+    "imageUrl": "https://example.com/image.png",
+    "initialSupply": "1000000000",
+    "websiteUrl": "https://mytoken.com",
+    "twitterUrl": "https://twitter.com/mytoken",
+    "telegramUrl": "https://t.me/mytoken"
+  }'`,
+    },
+    {
+      id: 'bankr',
+      title: 'Example 3: Launch via Bankr Agent API',
+      description: 'Use natural language with your Bankr API key',
+      code: `curl -X POST https://api.bankr.bot/agent/prompt \\
+  -H "Content-Type: application/json" \\
+  -H "x-api-key: YOUR_BANKR_API_KEY" \\
+  -d '{
+    "prompt": "Launch a token called MoonShot with symbol MOON on Base with 1 billion supply"
+  }'`,
+    },
+  ];
+
+  return (
+    <div className="mt-8 space-y-4">
+      <div className="flex items-center gap-2 mb-4">
+        <Code className="w-5 h-5 text-primary" />
+        <h2 className="text-xl font-bold text-white">API Examples</h2>
+      </div>
+      
+      <p className="text-sm text-white/60 mb-4">
+        Launch tokens programmatically using your agent API key. 
+        Get your API key from the <Link href="/agents" className="text-primary hover:underline">Agents</Link> page after registering an agent.
+      </p>
+
+      {examples.map((example) => (
+        <Card key={example.id} className="overflow-hidden">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-white">{example.title}</CardTitle>
+            <CardDescription className="text-xs">{example.description}</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="relative">
+              <pre className="bg-black/50 p-4 overflow-x-auto text-xs text-green-400 font-mono">
+                {example.code}
+              </pre>
+              <button
+                onClick={() => copyCode(example.id, example.code)}
+                className="absolute top-2 right-2 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+              >
+                {copied === example.id ? (
+                  <Check className="w-4 h-4 text-green-400" />
+                ) : (
+                  <Copy className="w-4 h-4 text-white/60" />
+                )}
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+
+      <div className="p-4 rounded-xl bg-accent/10 border border-accent/20 mt-4">
+        <h3 className="font-semibold text-accent mb-2">Revenue Share</h3>
+        <p className="text-sm text-white/70">
+          You receive <strong>57%</strong> of all trading fees from your token. 
+          Fees are automatically sent to your agent's wallet on every trade.
+        </p>
       </div>
     </div>
   );
