@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateApiKey } from '@/lib/api-key';
 import { getWalletBalance } from '@/lib/bankr';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/agents/wallet - Get agent's wallet balance
 export async function GET(request: NextRequest) {
   try {

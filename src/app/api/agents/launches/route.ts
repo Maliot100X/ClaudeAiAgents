@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAllTokens } from '@/lib/redis';
 import { validateApiKey } from '@/lib/api-key';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/agents/launches - Get agent's token launches (alias for /api/agents/launch GET)
 export async function GET(request: NextRequest) {
   try {

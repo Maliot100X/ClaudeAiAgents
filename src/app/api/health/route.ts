@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { redis, checkRedisConnection } from '@/lib/redis';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     // Check Redis connection
