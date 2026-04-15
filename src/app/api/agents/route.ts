@@ -154,14 +154,16 @@ async function handleRegister(request: NextRequest) {
     }, { status: 400 });
   }
   
-  // Get owner info from Neynar
-  const owner = await getUserByFid(ownerFid);
-  if (!owner) {
-    return NextResponse.json({
-      success: false,
-      error: 'Owner not found on Farcaster',
-    }, { status: 404 });
+  // Get owner info from Neynar (optional - use provided username if fails)
+  let owner = null;
+  try {
+    owner = await getUserByFid(ownerFid);
+  } catch (error) {
+    console.log('Neynar lookup failed, using provided username');
   }
+  
+  // Use provided username or fallback
+  const finalOwnerUsername = ownerUsername || owner?.username || `fid_${ownerFid}`;
   
   // Generate unique agent ID and API key
   const agentId = generateId();
@@ -183,7 +185,7 @@ async function handleRegister(request: NextRequest) {
     name,
     description,
     ownerFid,
-    ownerUsername: ownerUsername || owner.username,
+    ownerUsername: finalOwnerUsername,
     skills,
     imageUrl,
   });
@@ -195,7 +197,7 @@ async function handleRegister(request: NextRequest) {
     description,
     imageUrl: imageUrl || null,
     ownerFid,
-    ownerUsername: ownerUsername || owner.username,
+    ownerUsername: finalOwnerUsername,
     skills: skills || [],
     reputation: 0,
     tokensLaunched: 0,

@@ -79,6 +79,7 @@ export default function RegisterPage() {
           imageUrl: formData.imageUrl,
           skills: formData.skills,
           ownerFid: user.fid,
+          ownerUsername: user.username || `fid_${user.fid}`,
         }),
       });
 
