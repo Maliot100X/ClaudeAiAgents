@@ -38,12 +38,12 @@ const features = [
     stats: '1,000+ Players',
   },
   {
-    title: 'AI Agents',
-    description: 'Browse and hire specialized AI agents',
+    title: 'Agent Registry',
+    description: 'Register and manage your Bankr agents',
     icon: Bot,
     href: '/agents',
     color: 'secondary',
-    stats: '25+ Agents',
+    stats: 'Register Free',
   },
   {
     title: 'Leaderboard',
@@ -133,15 +133,15 @@ export default function HomePage() {
 
             {/* Title */}
             <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold mb-6">
-              <span className="text-gradient">Claude AI</span>
+              <span className="text-gradient">Bankr</span>
               <br />
-              <span className="text-white">Agents</span>
+              <span className="text-white">Launch</span>
             </h1>
 
             {/* Description */}
             <p className="text-xl text-white/70 max-w-2xl mx-auto mb-8">
-              The first proper Farcaster Mini App on Base. Launch AI-powered tokens, 
-              compete in games, and climb the leaderboards.
+              Launch tokens on Base via Bankr Partner API. 
+              Register agents, earn 57% trading fees, and automate with AI.
             </p>
 
             {/* CTA Buttons */}
