@@ -133,9 +133,9 @@ export default function HomePage() {
 
             {/* Title */}
             <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold mb-6">
-              <span className="text-gradient">Bankr</span>
+              <span className="text-gradient">Bankr Launch</span>
               <br />
-              <span className="text-white">Launch</span>
+              <span className="text-white">Token Platform</span>
             </h1>
 
             {/* Description */}
