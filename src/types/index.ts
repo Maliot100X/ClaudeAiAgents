@@ -111,6 +111,7 @@ export interface TokenLaunchResult {
   txHash?: string;
   tokenId?: string;
   poolAddress?: string;
+  jobId?: string;
   error?: string;
 }
 

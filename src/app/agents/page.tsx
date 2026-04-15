@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
@@ -24,7 +24,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { formatNumber, formatAddress } from '@/lib/utils';
 
-export default function AgentsPage() {
+// Main component with search params
+function AgentsPageContent() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -280,5 +281,21 @@ export default function AgentsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// Export with Suspense wrapper
+export default function AgentsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Bot className="w-12 h-12 text-primary mx-auto mb-4 animate-pulse" />
+          <p className="text-white/60">Loading agents...</p>
+        </div>
+      </div>
+    }>
+      <AgentsPageContent />
+    </Suspense>
   );
 }

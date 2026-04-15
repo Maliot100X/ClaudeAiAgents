@@ -195,11 +195,8 @@ export async function launchTokenViaBankr(params: TokenLaunchParams): Promise<To
     return {
       success: true,
       contractAddress: data.contractAddress,
-      transactionHash: data.transactionHash,
+      txHash: data.transactionHash || data.txHash,
       jobId: data.jobId,
-      name: params.name,
-      symbol: params.symbol,
-      chain: params.chain || 'base',
     };
   } catch (error: any) {
     console.error('Error launching token:', error.message);
